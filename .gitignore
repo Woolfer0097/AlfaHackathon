@@ -13,3 +13,5 @@ ENV/
 *.pth
 .DS_Store
 .env
+logs/
+*.log

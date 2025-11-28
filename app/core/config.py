@@ -14,6 +14,12 @@ class Settings(BaseSettings):
     # ML Model settings
     model_path: str = "models/model.pkl"
     
+    # Logging settings
+    log_level: str = "INFO"
+    log_file: str = "logs/app.log"
+    log_max_bytes: int = 10 * 1024 * 1024  # 10MB
+    log_backup_count: int = 5
+    
     class Config:
         env_file = ".env"
         case_sensitive = False
