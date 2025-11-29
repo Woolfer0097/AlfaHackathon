@@ -1,11 +1,16 @@
 export interface Client {
   id: number;
   full_name: string;
-  age: number;
-  city: string;
-  segment: string;
+  age: number | null;
+  city: string | null;
+  segment: string | null;
   products: string[];
   risk_score: number;
+  // Additional fields from backend
+  adminarea?: string | null;
+  gender?: string | null;
+  incomeValue?: number | null;
+  incomeValueCategory?: string | null;
 }
 
 export interface IncomePrediction {
@@ -39,6 +44,16 @@ export interface Recommendation {
   description?: string;
 }
 
+export interface TrainingRun {
+  model_version: string;
+  trained_at: string;
+  train_samples: number;
+  valid_samples: number;
+  rmse: number;
+  mae: number;
+  r2: number;
+}
+
 export interface ModelMetrics {
   wmae_validation: number;
   training_records: number;
@@ -46,6 +61,7 @@ export interface ModelMetrics {
   predictions_count: number;
   experiments: Experiment[];
   segment_errors: SegmentError[];
+  training_runs?: TrainingRun[];
 }
 
 export interface Experiment {

@@ -5,6 +5,13 @@ import {
   Box,
   Alert,
   CircularProgress,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Chip,
 } from '@mui/material';
 import {
   LineChart,
@@ -19,6 +26,30 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import { useModelMetrics } from '../hooks/useMetrics';
+import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
+import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
+import RemoveIcon from '@mui/icons-material/Remove';
+
+const formatNumber = (value: number) => {
+  return new Intl.NumberFormat('ru-RU', {
+    maximumFractionDigits: 2,
+  }).format(value);
+};
+
+const formatDate = (dateString: string) => {
+  try {
+    const date = new Date(dateString);
+    return new Intl.DateTimeFormat('ru-RU', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    }).format(date);
+  } catch {
+    return dateString;
+  }
+};
 
 export const MonitoringPage = () => {
   const { data: metrics, isLoading, error } = useModelMetrics();
@@ -59,12 +90,115 @@ export const MonitoringPage = () => {
     wmae: seg.wmae,
   }));
 
+  // Training runs data
+  const trainingRuns = metrics.training_runs || [];
+  const latestRun = trainingRuns.length > 0 ? trainingRuns[trainingRuns.length - 1] : null;
+  const previousRun = trainingRuns.length > 1 ? trainingRuns[trainingRuns.length - 2] : null;
+
+  // Calculate trends
+  const getTrend = (current: number, previous: number | null) => {
+    if (!previous) return { icon: <RemoveIcon />, color: 'text.secondary', change: 0 };
+    const change = ((current - previous) / previous) * 100;
+    if (change < 0) {
+      return { icon: <ArrowDownwardIcon />, color: 'success.main', change: Math.abs(change) };
+    } else if (change > 0) {
+      return { icon: <ArrowUpwardIcon />, color: 'error.main', change };
+    }
+    return { icon: <RemoveIcon />, color: 'text.secondary', change: 0 };
+  };
+
+  const rmseTrend = latestRun && previousRun ? getTrend(latestRun.rmse, previousRun.rmse) : null;
+  const maeTrend = latestRun && previousRun ? getTrend(latestRun.mae, previousRun.mae) : null;
+  const r2Trend = latestRun && previousRun ? getTrend(latestRun.r2, previousRun.r2) : null;
+
+  // For time series chart - reverse to show chronological order
+  const trainingRunsChartData = [...trainingRuns]
+    .reverse()
+    .map((run) => ({
+      date: formatDate(run.trained_at),
+      rmse: run.rmse,
+      mae: run.mae,
+      r2: run.r2,
+    }));
+
   return (
     <Container maxWidth="xl">
       <Typography variant="h4" gutterBottom sx={{ mb: 3 }}>
         Мониторинг модели
       </Typography>
 
+      {/* Training Metrics Header Cards */}
+      {latestRun && (
+        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(4, 1fr)' }, gap: 3, mb: 4 }}>
+          <Paper sx={{ p: 3 }}>
+            <Typography variant="body2" color="text.secondary" gutterBottom>
+              RMSE (последний запуск)
+            </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Typography variant="h4" color="primary">
+                {formatNumber(latestRun.rmse)}
+              </Typography>
+              {rmseTrend && (
+                <Box sx={{ display: 'flex', alignItems: 'center', color: rmseTrend.color }}>
+                  {rmseTrend.icon}
+                  <Typography variant="caption">
+                    {rmseTrend.change > 0 ? `${formatNumber(rmseTrend.change)}%` : ''}
+                  </Typography>
+                </Box>
+              )}
+            </Box>
+          </Paper>
+
+          <Paper sx={{ p: 3 }}>
+            <Typography variant="body2" color="text.secondary" gutterBottom>
+              MAE (последний запуск)
+            </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Typography variant="h4" color="primary">
+                {formatNumber(latestRun.mae)}
+              </Typography>
+              {maeTrend && (
+                <Box sx={{ display: 'flex', alignItems: 'center', color: maeTrend.color }}>
+                  {maeTrend.icon}
+                  <Typography variant="caption">
+                    {maeTrend.change > 0 ? `${formatNumber(maeTrend.change)}%` : ''}
+                  </Typography>
+                </Box>
+              )}
+            </Box>
+          </Paper>
+
+          <Paper sx={{ p: 3 }}>
+            <Typography variant="body2" color="text.secondary" gutterBottom>
+              R² (последний запуск)
+            </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Typography variant="h4" color="primary">
+                {formatNumber(latestRun.r2)}
+              </Typography>
+              {r2Trend && (
+                <Box sx={{ display: 'flex', alignItems: 'center', color: r2Trend.color }}>
+                  {r2Trend.icon}
+                  <Typography variant="caption">
+                    {r2Trend.change > 0 ? `${formatNumber(r2Trend.change)}%` : ''}
+                  </Typography>
+                </Box>
+              )}
+            </Box>
+          </Paper>
+
+          <Paper sx={{ p: 3 }}>
+            <Typography variant="body2" color="text.secondary" gutterBottom>
+              Обучено записей
+            </Typography>
+            <Typography variant="h4" color="primary">
+              {new Intl.NumberFormat('ru-RU').format(latestRun.train_samples)}
+            </Typography>
+          </Paper>
+        </Box>
+      )}
+
+      {/* General Metrics Cards */}
       <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(3, 1fr)' }, gap: 3, mb: 4 }}>
         <Paper sx={{ p: 3 }}>
           <Typography variant="body2" color="text.secondary" gutterBottom>
@@ -93,43 +227,141 @@ export const MonitoringPage = () => {
         </Paper>
       </Box>
 
+      {/* Training Runs Time Series Chart */}
+      {trainingRunsChartData.length > 0 && (
+        <Paper sx={{ p: 3, mb: 4 }}>
+          <Typography variant="h6" gutterBottom>
+            История обучения модели
+          </Typography>
+          <ResponsiveContainer width="100%" height={400}>
+            <LineChart data={trainingRunsChartData}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="date" angle={-45} textAnchor="end" height={100} />
+              <YAxis yAxisId="left" />
+              <YAxis yAxisId="right" orientation="right" />
+              <Tooltip />
+              <Legend />
+              <Line
+                yAxisId="left"
+                type="monotone"
+                dataKey="rmse"
+                stroke="#EF3124"
+                name="RMSE"
+                strokeWidth={2}
+                dot={{ r: 4 }}
+              />
+              <Line
+                yAxisId="left"
+                type="monotone"
+                dataKey="mae"
+                stroke="#1976d2"
+                name="MAE"
+                strokeWidth={2}
+                dot={{ r: 4 }}
+              />
+              <Line
+                yAxisId="right"
+                type="monotone"
+                dataKey="r2"
+                stroke="#2e7d32"
+                name="R²"
+                strokeWidth={2}
+                dot={{ r: 4 }}
+              />
+            </LineChart>
+          </ResponsiveContainer>
+        </Paper>
+      )}
+
+      {/* Training Runs Table */}
+      {trainingRuns.length > 0 && (
+        <Paper sx={{ p: 3, mb: 4 }}>
+          <Typography variant="h6" gutterBottom>
+            История запусков обучения
+          </Typography>
+          <TableContainer>
+            <Table size="small">
+              <TableHead>
+                <TableRow>
+                  <TableCell>Версия модели</TableCell>
+                  <TableCell>Дата обучения</TableCell>
+                  <TableCell align="right">Обучающих записей</TableCell>
+                  <TableCell align="right">Валидационных записей</TableCell>
+                  <TableCell align="right">RMSE</TableCell>
+                  <TableCell align="right">MAE</TableCell>
+                  <TableCell align="right">R²</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {[...trainingRuns].reverse().map((run, idx) => (
+                  <TableRow key={idx} hover>
+                    <TableCell>
+                      <Chip label={run.model_version} size="small" />
+                    </TableCell>
+                    <TableCell>{formatDate(run.trained_at)}</TableCell>
+                    <TableCell align="right">
+                      {new Intl.NumberFormat('ru-RU').format(run.train_samples)}
+                    </TableCell>
+                    <TableCell align="right">
+                      {new Intl.NumberFormat('ru-RU').format(run.valid_samples)}
+                    </TableCell>
+                    <TableCell align="right">{formatNumber(run.rmse)}</TableCell>
+                    <TableCell align="right">{formatNumber(run.mae)}</TableCell>
+                    <TableCell align="right">{formatNumber(run.r2)}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        </Paper>
+      )}
+
+      {/* Existing Charts */}
       <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(2, 1fr)' }, gap: 3 }}>
         <Paper sx={{ p: 3 }}>
           <Typography variant="h6" gutterBottom>
             История экспериментов
           </Typography>
-          <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={experimentsData}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="name" />
-              <YAxis />
-              <Tooltip />
-              <Legend />
-              <Line
-                type="monotone"
-                dataKey="wmae"
-                stroke="#EF3124"
-                name="WMAE"
-                strokeWidth={2}
-              />
-            </LineChart>
-          </ResponsiveContainer>
+          {experimentsData.length > 0 ? (
+            <ResponsiveContainer width="100%" height={300}>
+              <LineChart data={experimentsData}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="name" />
+                <YAxis />
+                <Tooltip />
+                <Legend />
+                <Line
+                  type="monotone"
+                  dataKey="wmae"
+                  stroke="#EF3124"
+                  name="WMAE"
+                  strokeWidth={2}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          ) : (
+            <Alert severity="info">Нет данных об экспериментах</Alert>
+          )}
         </Paper>
 
         <Paper sx={{ p: 3 }}>
           <Typography variant="h6" gutterBottom>
             Ошибки по сегментам
           </Typography>
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={segmentErrorsData}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="segment" />
-              <YAxis />
-              <Tooltip />
-              <Legend />
-              <Bar dataKey="wmae" fill="#EF3124" name="WMAE" />
-            </BarChart>
-          </ResponsiveContainer>
+          {segmentErrorsData.length > 0 ? (
+            <ResponsiveContainer width="100%" height={300}>
+              <BarChart data={segmentErrorsData}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="segment" />
+                <YAxis />
+                <Tooltip />
+                <Legend />
+                <Bar dataKey="wmae" fill="#EF3124" name="WMAE" />
+              </BarChart>
+            </ResponsiveContainer>
+          ) : (
+            <Alert severity="info">Нет данных по сегментам</Alert>
+          )}
         </Paper>
       </Box>
 
@@ -145,4 +377,3 @@ export const MonitoringPage = () => {
     </Container>
   );
 };
-

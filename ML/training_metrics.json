@@ -1,0 +1,20 @@
+[
+  {
+    "model_version": "income_model_v3",
+    "trained_at": "2025-11-29T19:59:34",
+    "train_samples": 76786,
+    "valid_samples": 76786,
+    "rmse": 72252.77048409019,
+    "mae": 33117.78599373988,
+    "r2": 0.5868453218293594
+  },
+  {
+    "model_version": "income_model_v3",
+    "trained_at": "2025-11-29T20:15:26",
+    "train_samples": 76786,
+    "valid_samples": 76786,
+    "rmse": 72252.77048409019,
+    "mae": 33117.78599373988,
+    "r2": 0.5868453218293594
+  }
+]
