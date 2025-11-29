@@ -61,14 +61,23 @@ async def get_client_income(
     try:
         predicted_income = ml_service.predict(client_data)
         
+        # Get actual income value if available (for metrics calculation)
+        actual_income = client_data.get("incomeValue")
+        prediction_error = None
+        if actual_income is not None and isinstance(actual_income, (int, float)):
+            # Calculate absolute error for metrics
+            prediction_error = abs(predicted_income - float(actual_income))
+        
         # Calculate confidence interval (simple approach: ±10%)
         lower_bound = predicted_income * 0.9
         upper_bound = predicted_income * 1.1
         
-        # Log prediction
+        # Log prediction with actual income and error if available
         prediction_log = PredictionLog(
             client_id=client_id,
             predicted_income=predicted_income,
+            actual_income=float(actual_income) if actual_income is not None else None,
+            prediction_error=prediction_error,
             prediction_time=datetime.utcnow()
         )
         db.add(prediction_log)
@@ -78,7 +87,7 @@ async def get_client_income(
             predicted_income=predicted_income,
             lower_bound=lower_bound,
             upper_bound=upper_bound,
-            base_income=None
+            base_income=float(actual_income) if actual_income is not None else None
         )
     except Exception as e:
         logger.error(f"Error predicting income for client {client_id}: {e}", exc_info=True)

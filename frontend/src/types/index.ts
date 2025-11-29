@@ -44,6 +44,16 @@ export interface Recommendation {
   description?: string;
 }
 
+export interface TrainingRun {
+  model_version: string;
+  trained_at: string;
+  train_samples: number;
+  valid_samples: number;
+  rmse: number;
+  mae: number;
+  r2: number;
+}
+
 export interface ModelMetrics {
   wmae_validation: number;
   training_records: number;
@@ -51,6 +61,7 @@ export interface ModelMetrics {
   predictions_count: number;
   experiments: Experiment[];
   segment_errors: SegmentError[];
+  training_runs?: TrainingRun[];
 }
 
 export interface Experiment {

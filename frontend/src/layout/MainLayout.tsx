@@ -14,7 +14,6 @@ import {
   CssBaseline,
 } from '@mui/material';
 import PersonIcon from '@mui/icons-material/Person';
-import RecommendIcon from '@mui/icons-material/Recommend';
 import InsightsIcon from '@mui/icons-material/Insights';
 
 const drawerWidth = 240;
@@ -28,14 +27,12 @@ export const MainLayout = ({ children }: MainLayoutProps) => {
   const location = useLocation();
   const [selectedIndex, setSelectedIndex] = useState(() => {
     if (location.pathname === '/') return 0;
-    if (location.pathname === '/recommendations') return 1;
-    if (location.pathname === '/monitoring') return 2;
+    if (location.pathname === '/monitoring') return 1;
     return 0;
   });
 
   const menuItems = [
     { text: 'Клиент', icon: <PersonIcon />, path: '/' },
-    { text: 'Рекомендации', icon: <RecommendIcon />, path: '/recommendations' },
     { text: 'Мониторинг модели', icon: <InsightsIcon />, path: '/monitoring' },
   ];
 

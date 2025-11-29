@@ -47,6 +47,25 @@ class MLService:
             self.model = CatBoostRegressor()
             self.model.load_model(str(model_path))
             
+            # Get actual feature names from the model (in the order the model expects)
+            # CatBoost models store feature names in the order they were trained
+            try:
+                model_feature_names = self.model.feature_names_
+                if model_feature_names and len(model_feature_names) > 0:
+                    # Model has feature names - use them as the source of truth for order
+                    logger.info(f"Model has {len(model_feature_names)} features with names")
+                    # Use model's feature names and order - this is what the model expects
+                    self.feature_cols = list(model_feature_names)
+                    logger.info(f"Using feature order from model ({len(self.feature_cols)} features)")
+                    
+                    # Update categorical features to only include those that are actually in the model
+                    self.cat_features = [f for f in self.cat_features if f in self.feature_cols]
+                    logger.info(f"Updated categorical features to {len(self.cat_features)} (matching model)")
+                else:
+                    logger.warning("Model does not have feature names, using metadata order")
+            except Exception as e:
+                logger.warning(f"Could not get feature names from model: {e}, using metadata order")
+            
             logger.info(f"Loaded CatBoost model from {model_path}")
             logger.info(f"Model has {len(self.feature_cols)} features, {len(self.cat_features)} categorical")
             

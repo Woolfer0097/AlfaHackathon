@@ -5,7 +5,6 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { theme } from './theme';
 import { MainLayout } from './layout/MainLayout';
 import { ClientPage } from './pages/ClientPage';
-import { RecommendationsPage } from './pages/RecommendationsPage';
 import { MonitoringPage } from './pages/MonitoringPage';
 
 const queryClient = new QueryClient({
@@ -26,7 +25,6 @@ function App() {
           <MainLayout>
             <Routes>
               <Route path="/" element={<ClientPage />} />
-              <Route path="/recommendations" element={<RecommendationsPage />} />
               <Route path="/monitoring" element={<MonitoringPage />} />
             </Routes>
           </MainLayout>

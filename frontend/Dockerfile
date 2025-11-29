@@ -18,15 +18,25 @@ COPY . .
 # Build application with production API URL
 ARG VITE_API_BASE_URL=/api/v1
 ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
-RUN npm run build
+RUN echo "Building frontend with VITE_API_BASE_URL=$VITE_API_BASE_URL" && \
+    npm run build && \
+    echo "Frontend build completed successfully" && \
+    ls -la dist/
 
 # Production stage - copy built files to volume mount point
 FROM alpine:latest
 
 WORKDIR /app
 
-# Copy built files
-COPY --from=builder /app/dist ./dist
+# Install bash for better scripting
+RUN apk add --no-cache bash
 
-# Keep container running so volume mount works
-CMD ["sh", "-c", "while true; do sleep 3600; done"]
+# Copy built files to backup location (volume will mount over /app/dist)
+COPY --from=builder /app/dist ./dist_backup
+
+# Copy entrypoint script
+COPY docker-entrypoint.sh /docker-entrypoint.sh
+RUN chmod +x /docker-entrypoint.sh
+
+# Use entrypoint to copy files and log
+ENTRYPOINT ["/docker-entrypoint.sh"]

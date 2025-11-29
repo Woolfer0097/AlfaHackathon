@@ -19,10 +19,11 @@ logger = get_logger(__name__)
     tags=["clients"]
 )
 async def get_clients(
-    limit: int = Query(100, ge=1, le=1000, description="Maximum number of results"),
+    limit: int = Query(100, ge=1, le=10000, description="Maximum number of results"),
     offset: int = Query(0, ge=0, description="Offset for pagination"),
     adminarea: Optional[str] = Query(None, description="Filter by administrative area (region)"),
     city: Optional[str] = Query(None, description="Filter by city"),
+    search: Optional[str] = Query(None, description="Search query (not yet implemented)"),
     db: Session = Depends(get_db)
 ) -> List[Client]:
     """
@@ -41,7 +42,7 @@ async def get_clients(
     Returns:
         List[Client]: List of clients
     """
-    logger.debug(f"Fetching clients: limit={limit}, offset={offset}, adminarea={adminarea}, city={city}")
+    logger.debug(f"Fetching clients: limit={limit}, offset={offset}, adminarea={adminarea}, city={city}, search={search}")
     
     clients = ClientService.list_clients(
         db=db,

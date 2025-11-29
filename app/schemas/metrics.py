@@ -1,6 +1,5 @@
 from pydantic import BaseModel, Field
 from typing import List, Optional
-from datetime import datetime
 
 
 class Experiment(BaseModel):
@@ -35,6 +34,31 @@ class SegmentError(BaseModel):
         }
 
 
+class TrainingRun(BaseModel):
+    """Training run metrics schema"""
+    
+    model_version: str = Field(..., description="Model version identifier", example="income_model_v3")
+    trained_at: str = Field(..., description="Training timestamp in ISO format", example="2025-11-29T20:15:26")
+    train_samples: int = Field(..., description="Number of training samples", example=76786, ge=0)
+    valid_samples: int = Field(..., description="Number of validation samples", example=76786, ge=0)
+    rmse: float = Field(..., description="Root Mean Squared Error", example=72252.77)
+    mae: float = Field(..., description="Mean Absolute Error", example=33117.79)
+    r2: float = Field(..., description="R-squared coefficient", example=0.5868)
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "model_version": "income_model_v3",
+                "trained_at": "2025-11-29T20:15:26",
+                "train_samples": 76786,
+                "valid_samples": 76786,
+                "rmse": 72252.77,
+                "mae": 33117.79,
+                "r2": 0.5868
+            }
+        }
+
+
 class ModelMetrics(BaseModel):
     """Model performance metrics schema"""
     
@@ -44,6 +68,7 @@ class ModelMetrics(BaseModel):
     predictions_count: int = Field(..., description="Total number of predictions made", example=5000, ge=0)
     experiments: List[Experiment] = Field(..., description="List of experiment results")
     segment_errors: List[SegmentError] = Field(..., description="Error metrics by client segment")
+    training_runs: List[TrainingRun] = Field(default_factory=list, description="List of training run metrics")
     
     class Config:
         json_schema_extra = {

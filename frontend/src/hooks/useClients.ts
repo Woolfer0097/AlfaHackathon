@@ -5,7 +5,21 @@ import type { Client } from '../types';
 export const useClients = () => {
   return useQuery<Client[]>({
     queryKey: ['clients'],
-    queryFn: clientsApi.getClients,
+    queryFn: () => clientsApi.getClients(),
+  });
+};
+
+export const useClientsPaginated = (limit: number, offset: number, search?: string) => {
+  return useQuery<Client[]>({
+    queryKey: ['clients', 'paginated', limit, offset, search],
+    queryFn: () => clientsApi.getClients(limit, offset, search),
+  });
+};
+
+export const useClientsCount = (search?: string) => {
+  return useQuery<number>({
+    queryKey: ['clients', 'count', search],
+    queryFn: () => clientsApi.getClientsCount(search),
   });
 };
 

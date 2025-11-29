@@ -15,9 +15,10 @@ class Settings(BaseSettings):
     database_url: str = "postgresql://postgres:postgres@localhost:5432/hackathon"
     
     # ML Model settings
-    model_path: str = "ML/catboost_income_model.cbm"
+    model_path: str = "ML/income_model_v3.cbm"
     model_meta_path: str = "ML/model_meta.json"
     metrics_path: str = "ML/metrics.json"
+    training_metrics_path: str = "ML/training_metrics.json"
     
     # Logging settings
     log_level: str = "INFO"
