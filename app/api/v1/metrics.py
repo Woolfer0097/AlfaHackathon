@@ -1,41 +1,15 @@
-from fastapi import APIRouter
+import json
+from pathlib import Path
+from fastapi import APIRouter, HTTPException, Depends
+from sqlalchemy.orm import Session
 from app.schemas.metrics import ModelMetrics, Experiment, SegmentError
+from app.core.config import settings
 from app.core.logging import get_logger
+from app.core.database import get_db
+from app.models.prediction_logs import PredictionLog
 
 router = APIRouter()
 logger = get_logger(__name__)
-
-
-# Mock metrics data
-MOCK_METRICS = ModelMetrics(
-    wmae_validation=0.125,
-    training_records=10000,
-    validation_records=2000,
-    predictions_count=5000,
-    experiments=[
-        Experiment(
-            name="baseline_model_v1",
-            wmae=0.125,
-            date="2024-01-15T10:30:00Z"
-        ),
-        Experiment(
-            name="improved_model_v2",
-            wmae=0.112,
-            date="2024-02-01T14:20:00Z"
-        ),
-        Experiment(
-            name="ensemble_model_v3",
-            wmae=0.108,
-            date="2024-02-15T09:15:00Z"
-        ),
-    ],
-    segment_errors=[
-        SegmentError(segment="VIP", wmae=0.095),
-        SegmentError(segment="Premium", wmae=0.110),
-        SegmentError(segment="Standard", wmae=0.140),
-        SegmentError(segment="Basic", wmae=0.165),
-    ]
-)
 
 
 @router.get(
@@ -46,7 +20,7 @@ MOCK_METRICS = ModelMetrics(
     response_description="Model metrics object with performance data",
     tags=["metrics"]
 )
-async def get_model_metrics() -> ModelMetrics:
+async def get_model_metrics(db: Session = Depends(get_db)) -> ModelMetrics:
     """
     Get model performance metrics.
     
@@ -57,9 +31,69 @@ async def get_model_metrics() -> ModelMetrics:
     - Historical experiment results
     - Segment-specific error metrics
     
+    Metrics are loaded from metrics.json file prepared by ML team.
+    
+    Args:
+        db: Database session (for counting predictions)
+    
     Returns:
         ModelMetrics: Complete model performance metrics
     """
     logger.debug("Fetching model metrics")
-    return MOCK_METRICS
+    
+    # Load metrics from JSON file
+    metrics_path = Path(settings.metrics_path)
+    
+    if not metrics_path.exists():
+        logger.warning(f"Metrics file not found at {metrics_path}, returning default metrics")
+        # Return default metrics if file doesn't exist
+        predictions_count = db.query(PredictionLog).count()
+        return ModelMetrics(
+            wmae_validation=0.0,
+            training_records=0,
+            validation_records=0,
+            predictions_count=predictions_count,
+            experiments=[],
+            segment_errors=[]
+        )
+    
+    try:
+        with open(metrics_path, 'r', encoding='utf-8') as f:
+            metrics_data = json.load(f)
+        
+        # Get predictions count from database
+        predictions_count = db.query(PredictionLog).count()
+        
+        # Convert JSON data to ModelMetrics schema
+        experiments = [
+            Experiment(
+                name=exp.get("name", ""),
+                wmae=exp.get("wmae", 0.0),
+                date=exp.get("date")
+            )
+            for exp in metrics_data.get("experiments", [])
+        ]
+        
+        segment_errors = [
+            SegmentError(
+                segment=seg.get("segment", ""),
+                wmae=seg.get("wmae", 0.0)
+            )
+            for seg in metrics_data.get("segment_errors", [])
+        ]
+        
+        return ModelMetrics(
+            wmae_validation=metrics_data.get("wmae_validation", 0.0),
+            training_records=metrics_data.get("training_records", 0),
+            validation_records=metrics_data.get("validation_records", 0),
+            predictions_count=predictions_count,
+            experiments=experiments,
+            segment_errors=segment_errors
+        )
+    except Exception as e:
+        logger.error(f"Error loading metrics: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error loading metrics: {str(e)}"
+        )
 

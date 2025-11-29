@@ -1,130 +1,16 @@
-from fastapi import APIRouter, HTTPException, Path
+from fastapi import APIRouter, HTTPException, Path, Depends
+from sqlalchemy.orm import Session
+from datetime import datetime
+import numpy as np
 from app.schemas.prediction import IncomePrediction, ShapResponse, ShapFeature
 from app.core.logging import get_logger
+from app.core.database import get_db
+from app.services.client_service import ClientService
+from app.services.ml_service import get_ml_service
+from app.models.prediction_logs import PredictionLog
 
 router = APIRouter()
 logger = get_logger(__name__)
-
-
-# Mock prediction data - in real implementation, this would be generated based on client_id
-MOCK_INCOME_PREDICTIONS = {
-    1: IncomePrediction(
-        predicted_income=85000.0,
-        lower_bound=75000.0,
-        upper_bound=95000.0,
-        base_income=80000.0
-    ),
-    2: IncomePrediction(
-        predicted_income=65000.0,
-        lower_bound=55000.0,
-        upper_bound=75000.0,
-        base_income=60000.0
-    ),
-    3: IncomePrediction(
-        predicted_income=95000.0,
-        lower_bound=85000.0,
-        upper_bound=105000.0,
-        base_income=90000.0
-    ),
-}
-
-MOCK_SHAP_RESPONSES = {
-    1: ShapResponse(
-        text_explanation="Модель предсказывает более высокий доход на основе возраста клиента (35 лет), VIP сегмента и наличия нескольких продуктов. Основные факторы: положительное влияние возраста и сегмента, отрицательное влияние рискового скора.",
-        features=[
-            ShapFeature(
-                feature_name="age",
-                value=35,
-                shap_value=1250.5,
-                direction="positive",
-                description="Возраст клиента в годах"
-            ),
-            ShapFeature(
-                feature_name="segment",
-                value="VIP",
-                shap_value=3200.0,
-                direction="positive",
-                description="Сегмент клиента"
-            ),
-            ShapFeature(
-                feature_name="risk_score",
-                value=0.15,
-                shap_value=-850.0,
-                direction="negative",
-                description="Рисковый скор клиента"
-            ),
-            ShapFeature(
-                feature_name="products_count",
-                value=2,
-                shap_value=1100.0,
-                direction="positive",
-                description="Количество продуктов у клиента"
-            ),
-        ],
-        base_value=80000.0
-    ),
-    2: ShapResponse(
-        text_explanation="Модель предсказывает средний доход. Основные факторы: положительное влияние возраста, отрицательное влияние стандартного сегмента и более высокого рискового скора.",
-        features=[
-            ShapFeature(
-                feature_name="age",
-                value=28,
-                shap_value=800.0,
-                direction="positive",
-                description="Возраст клиента в годах"
-            ),
-            ShapFeature(
-                feature_name="segment",
-                value="Standard",
-                shap_value=-1500.0,
-                direction="negative",
-                description="Сегмент клиента"
-            ),
-            ShapFeature(
-                feature_name="risk_score",
-                value=0.35,
-                shap_value=-2200.0,
-                direction="negative",
-                description="Рисковый скор клиента"
-            ),
-        ],
-        base_value=60000.0
-    ),
-    3: ShapResponse(
-        text_explanation="Модель предсказывает высокий доход на основе премиум сегмента, возраста и наличия нескольких продуктов.",
-        features=[
-            ShapFeature(
-                feature_name="age",
-                value=42,
-                shap_value=1800.0,
-                direction="positive",
-                description="Возраст клиента в годах"
-            ),
-            ShapFeature(
-                feature_name="segment",
-                value="Premium",
-                shap_value=2800.0,
-                direction="positive",
-                description="Сегмент клиента"
-            ),
-            ShapFeature(
-                feature_name="risk_score",
-                value=0.22,
-                shap_value=-1200.0,
-                direction="negative",
-                description="Рисковый скор клиента"
-            ),
-            ShapFeature(
-                feature_name="products_count",
-                value=2,
-                shap_value=1300.0,
-                direction="positive",
-                description="Количество продуктов у клиента"
-            ),
-        ],
-        base_value=90000.0
-    ),
-}
 
 
 @router.get(
@@ -136,7 +22,8 @@ MOCK_SHAP_RESPONSES = {
     tags=["predictions"]
 )
 async def get_client_income(
-    client_id: int = Path(..., description="Unique client identifier", example=1, gt=0)
+    client_id: int = Path(..., description="Unique client identifier", example=1, gt=0),
+    db: Session = Depends(get_db)
 ) -> IncomePrediction:
     """
     Get income prediction for a specific client.
@@ -148,6 +35,7 @@ async def get_client_income(
     
     Args:
         client_id: Unique identifier of the client
+        db: Database session
         
     Returns:
         IncomePrediction: Income prediction with confidence bounds
@@ -157,16 +45,48 @@ async def get_client_income(
     """
     logger.debug(f"Fetching income prediction for client ID: {client_id}")
     
-    prediction = MOCK_INCOME_PREDICTIONS.get(client_id)
-    
-    if not prediction:
-        logger.warning(f"Income prediction not found for client ID {client_id}")
+    # Get client features
+    client_data = ClientService.get_client_features_dict(db, client_id)
+    if client_data is None:
+        logger.warning(f"Client with ID {client_id} not found")
         raise HTTPException(
             status_code=404,
-            detail=f"Income prediction not found for client with ID {client_id}"
+            detail=f"Client with ID {client_id} not found"
         )
     
-    return prediction
+    # Get ML service
+    ml_service = get_ml_service()
+    
+    # Predict income
+    try:
+        predicted_income = ml_service.predict(client_data)
+        
+        # Calculate confidence interval (simple approach: ±10%)
+        lower_bound = predicted_income * 0.9
+        upper_bound = predicted_income * 1.1
+        
+        # Log prediction
+        prediction_log = PredictionLog(
+            client_id=client_id,
+            predicted_income=predicted_income,
+            prediction_time=datetime.utcnow()
+        )
+        db.add(prediction_log)
+        db.commit()
+        
+        return IncomePrediction(
+            predicted_income=predicted_income,
+            lower_bound=lower_bound,
+            upper_bound=upper_bound,
+            base_income=None
+        )
+    except Exception as e:
+        logger.error(f"Error predicting income for client {client_id}: {e}", exc_info=True)
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error generating prediction: {str(e)}"
+        )
 
 
 @router.get(
@@ -178,7 +98,8 @@ async def get_client_income(
     tags=["predictions"]
 )
 async def get_client_shap(
-    client_id: int = Path(..., description="Unique client identifier", example=1, gt=0)
+    client_id: int = Path(..., description="Unique client identifier", example=1, gt=0),
+    db: Session = Depends(get_db)
 ) -> ShapResponse:
     """
     Get SHAP explanation for a specific client's income prediction.
@@ -194,23 +115,117 @@ async def get_client_shap(
     
     Args:
         client_id: Unique identifier of the client
+        db: Database session
         
     Returns:
         ShapResponse: SHAP explanation with feature contributions
         
     Raises:
-        HTTPException: 404 if SHAP explanation not found for the client
+        HTTPException: 404 if client with given ID is not found
     """
     logger.debug(f"Fetching SHAP explanation for client ID: {client_id}")
     
-    shap_response = MOCK_SHAP_RESPONSES.get(client_id)
-    
-    if not shap_response:
-        logger.warning(f"SHAP explanation not found for client ID {client_id}")
+    # Get client features
+    client_data = ClientService.get_client_features_dict(db, client_id)
+    if client_data is None:
+        logger.warning(f"Client with ID {client_id} not found")
         raise HTTPException(
             status_code=404,
-            detail=f"SHAP explanation not found for client with ID {client_id}"
+            detail=f"Client with ID {client_id} not found"
         )
     
-    return shap_response
+    # Get ML service
+    ml_service = get_ml_service()
+    
+    # Get SHAP values
+    try:
+        shap_result = ml_service.get_shap_values(client_data)
+        
+        # Sort features by absolute SHAP value (most important first)
+        features_sorted = sorted(
+            shap_result["features"],
+            key=lambda x: abs(x["shap_value"]),
+            reverse=True
+        )
+        
+        # Take top 20 features for explanation
+        top_features = features_sorted[:20]
+        
+        # Generate text explanation
+        positive_features = [f for f in top_features if f["shap_value"] > 0]
+        negative_features = [f for f in top_features if f["shap_value"] < 0]
+        
+        explanation_parts = []
+        if positive_features:
+            top_positive = positive_features[0]
+            explanation_parts.append(
+                f"Положительное влияние: {top_positive['feature_name']} "
+                f"(вклад: {top_positive['shap_value']:.2f})"
+            )
+        if negative_features:
+            top_negative = negative_features[0]
+            explanation_parts.append(
+                f"Отрицательное влияние: {top_negative['feature_name']} "
+                f"(вклад: {top_negative['shap_value']:.2f})"
+            )
+        
+        text_explanation = ". ".join(explanation_parts) if explanation_parts else "SHAP значения рассчитаны."
+        
+        # Convert to ShapFeature objects
+        shap_features = []
+        for f in top_features:
+            feature_value = f["feature_value"]
+            feature_name = f["feature_name"]
+            
+            # Handle None/NaN values - convert to appropriate type for schema
+            if feature_value is None:
+                # Use empty string for categorical features, 0 for numeric
+                if feature_name in ml_service.cat_features:
+                    feature_value = ""
+                else:
+                    feature_value = 0.0
+            elif isinstance(feature_value, float) and np.isnan(feature_value):
+                # Handle NaN values
+                if feature_name in ml_service.cat_features:
+                    feature_value = ""
+                else:
+                    feature_value = 0.0
+            elif isinstance(feature_value, str) and feature_value.lower() in ['nan', 'none', '']:
+                # Handle string "nan" values
+                if feature_name in ml_service.cat_features:
+                    feature_value = ""
+                else:
+                    feature_value = 0.0
+            else:
+                # Ensure correct type: string for categorical, number for numeric
+                if feature_name in ml_service.cat_features:
+                    feature_value = str(feature_value) if not isinstance(feature_value, str) else feature_value
+                else:
+                    # Try to convert to float, fallback to 0.0
+                    try:
+                        feature_value = float(feature_value) if not isinstance(feature_value, (int, float)) else feature_value
+                    except (ValueError, TypeError):
+                        feature_value = 0.0
+            
+            shap_features.append(
+                ShapFeature(
+                    feature_name=feature_name,
+                    value=feature_value,
+                    shap_value=f["shap_value"],
+                    direction=f["direction"],
+                    description=None
+                )
+            )
+        
+        return ShapResponse(
+            text_explanation=text_explanation,
+            features=shap_features,
+            base_value=shap_result["base_value"]
+        )
+    except Exception as e:
+        logger.error(f"Error calculating SHAP for client {client_id}: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error generating SHAP explanation: {str(e)}"
+        )
 

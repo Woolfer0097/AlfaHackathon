@@ -107,20 +107,54 @@ export const ClientPage = () => {
                       <Typography variant="body2" color="text.secondary">
                         Возраст
                       </Typography>
-                      <Typography variant="body1">{client.age} лет</Typography>
+                      <Typography variant="body1">
+                        {client.age !== null && client.age !== undefined ? `${client.age} лет` : 'Не указан'}
+                      </Typography>
                     </Box>
+                    {client.gender && (
+                      <Box sx={{ minWidth: 150 }}>
+                        <Typography variant="body2" color="text.secondary">
+                          Пол
+                        </Typography>
+                        <Typography variant="body1">{client.gender}</Typography>
+                      </Box>
+                    )}
                     <Box sx={{ minWidth: 150 }}>
                       <Typography variant="body2" color="text.secondary">
                         Город
                       </Typography>
-                      <Typography variant="body1">{client.city}</Typography>
+                      <Typography variant="body1">{client.city || 'Не указан'}</Typography>
                     </Box>
+                    {client.adminarea && (
+                      <Box sx={{ minWidth: 200 }}>
+                        <Typography variant="body2" color="text.secondary">
+                          Регион
+                        </Typography>
+                        <Typography variant="body1">{client.adminarea}</Typography>
+                      </Box>
+                    )}
                     <Box sx={{ minWidth: 150 }}>
                       <Typography variant="body2" color="text.secondary">
                         Сегмент
                       </Typography>
-                      <Typography variant="body1">{client.segment}</Typography>
+                      <Typography variant="body1">{client.segment || 'Не указан'}</Typography>
                     </Box>
+                    {client.incomeValue !== null && client.incomeValue !== undefined && (
+                      <Box sx={{ minWidth: 200 }}>
+                        <Typography variant="body2" color="text.secondary">
+                          Текущий доход
+                        </Typography>
+                        <Typography variant="body1">{formatCurrency(client.incomeValue)}</Typography>
+                      </Box>
+                    )}
+                    {client.incomeValueCategory && (
+                      <Box sx={{ minWidth: 150 }}>
+                        <Typography variant="body2" color="text.secondary">
+                          Категория дохода
+                        </Typography>
+                        <Typography variant="body1">{client.incomeValueCategory}</Typography>
+                      </Box>
+                    )}
                     <Box sx={{ minWidth: 200, flexGrow: 1 }}>
                       <Typography variant="body2" color="text.secondary">
                         Риск-скор
@@ -247,7 +281,7 @@ export const ClientPage = () => {
                   <Box sx={{ display: 'flex', gap: 2, mb: 3, flexWrap: 'wrap' }}>
                     <Box sx={{ flex: 1, minWidth: 200 }}>
                       <Typography variant="subtitle2" color="error" gutterBottom>
-                        ↓ Тянуть вниз
+                        ↓ -доход
                       </Typography>
                       <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
                         {shap.features
@@ -264,7 +298,7 @@ export const ClientPage = () => {
                     </Box>
                     <Box sx={{ flex: 1, minWidth: 200 }}>
                       <Typography variant="subtitle2" color="success.main" gutterBottom>
-                        ↑ Тянуть вверх
+                        ↑ +доход
                       </Typography>
                       <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
                         {shap.features

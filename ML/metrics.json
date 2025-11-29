@@ -1,0 +1,27 @@
+{
+  "wmae_validation": 0.125,
+  "training_records": 10000,
+  "validation_records": 2000,
+  "experiments": [
+    {
+      "name": "baseline_model_v1",
+      "wmae": 0.125,
+      "date": "2024-01-15T10:30:00Z"
+    }
+  ],
+  "segment_errors": [
+    {
+      "segment": "high_income",
+      "wmae": 0.095
+    },
+    {
+      "segment": "medium_income",
+      "wmae": 0.110
+    },
+    {
+      "segment": "low_income",
+      "wmae": 0.140
+    }
+  ]
+}
+

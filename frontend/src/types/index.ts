@@ -1,11 +1,16 @@
 export interface Client {
   id: number;
   full_name: string;
-  age: number;
-  city: string;
-  segment: string;
+  age: number | null;
+  city: string | null;
+  segment: string | null;
   products: string[];
   risk_score: number;
+  // Additional fields from backend
+  adminarea?: string | null;
+  gender?: string | null;
+  incomeValue?: number | null;
+  incomeValueCategory?: string | null;
 }
 
 export interface IncomePrediction {

@@ -22,6 +22,18 @@ def create_application() -> FastAPI:
         debug=settings.debug,
     )
     
+    # Initialize ML model on startup
+    @app.on_event("startup")
+    async def startup_event():
+        """Initialize ML model on application startup"""
+        try:
+            from app.services.ml_service import get_ml_service
+            ml_service = get_ml_service()
+            logger.info("ML model loaded successfully")
+        except Exception as e:
+            logger.error(f"Failed to load ML model: {e}", exc_info=True)
+            # Don't fail startup, but log the error
+    
     # Request logging middleware
     @app.middleware("http")
     async def log_requests(request: Request, call_next):
