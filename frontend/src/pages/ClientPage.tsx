@@ -363,16 +363,6 @@ export const ClientPage = () => {
                       </Box>
                     </Box>
                   </Box>
-                  <Box>
-                    <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                      Продукты
-                    </Typography>
-                    <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-                      {client.products.map((product) => (
-                        <Chip key={product} label={product} size="small" />
-                      ))}
-                    </Box>
-                  </Box>
                 </Stack>
               </CardContent>
             </Card>
