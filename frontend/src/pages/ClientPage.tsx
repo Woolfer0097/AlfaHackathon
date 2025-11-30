@@ -92,7 +92,11 @@ export const ClientPage = () => {
   const { data: recommendations, isLoading: recommendationsLoading } = useRecommendations(selectedClientId);
 
   const getRiskColor = (score: number) => {
-    if (score < 0.3) return 'success';
+    // Adjusted thresholds: lower risk scores are now considered "good"
+    // < 40% = low risk (green)
+    // 40-70% = medium risk (yellow)
+    // >= 70% = high risk (red)
+    if (score < 0.4) return 'success';
     if (score < 0.7) return 'warning';
     return 'error';
   };
