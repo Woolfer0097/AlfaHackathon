@@ -13,9 +13,15 @@ def calculate_risk_score(client_data: Dict[str, Any]) -> float:
     
     Factors considered:
     - Income level
+    - Debt-to-Income ratio (DTI)
+    - Monthly payment to income ratio (should not exceed 50%)
     - Age
     - Credit history (overdue payments, number of loans)
     - BKI data (total products, overdue amounts)
+    - Credit history requests frequency
+    - Recent loan application rejections
+    - Dependents (per capita income)
+    - Job stability (seniority)
     
     Args:
         client_data: Dictionary with client features
@@ -25,7 +31,7 @@ def calculate_risk_score(client_data: Dict[str, Any]) -> float:
     """
     risk_factors = []
     
-    # 1. Income factor (30% weight)
+    # 1. Income factor (15% weight) - reduced from 30% as DTI is more important
     income_value = client_data.get("incomeValue")
     income_risk = 0.5  # Default medium risk
     if income_value is not None and isinstance(income_value, (int, float)):
@@ -39,9 +45,57 @@ def calculate_risk_score(client_data: Dict[str, Any]) -> float:
             income_risk = 0.3  # Low risk
         else:
             income_risk = 0.2  # Very low risk
-    risk_factors.append(("income", income_risk, 0.3))
+    risk_factors.append(("income", income_risk, 0.15))
     
-    # 2. Age factor (10% weight)
+    # 2. Debt-to-Income ratio (DTI) factor (20% weight) - NEW
+    income_value = client_data.get("incomeValue")
+    total_debt = (
+        client_data.get("hdb_outstand_sum") or 0
+    ) + (
+        client_data.get("hdb_relend_outstand_sum") or 0
+    ) + (
+        client_data.get("loan_cur_amt") or 0
+    )
+    
+    dti_risk = 0.3  # Default low risk
+    if income_value is not None and isinstance(income_value, (int, float)) and income_value > 0:
+        dti_ratio = total_debt / income_value if isinstance(total_debt, (int, float)) else 0
+        if dti_ratio > 0.8:  # DTI > 80%
+            dti_risk = 0.9  # Very high risk
+        elif dti_ratio > 0.6:  # DTI > 60%
+            dti_risk = 0.8  # High risk
+        elif dti_ratio > 0.4:  # DTI > 40%
+            dti_risk = 0.6  # Medium-high risk
+        elif dti_ratio > 0.2:  # DTI > 20%
+            dti_risk = 0.4  # Low-medium risk
+        else:
+            dti_risk = 0.2  # Low risk
+    risk_factors.append(("dti", dti_risk, 0.20))
+    
+    # 3. Monthly payment to income ratio factor (15% weight) - NEW
+    # Rule: monthly payment should not exceed 50% of income
+    monthly_payment = (
+        client_data.get("dp_ils_paymentssum_avg_12m") or 0
+    ) / 12 if client_data.get("dp_ils_paymentssum_avg_12m") else 0
+    
+    payment_ratio_risk = 0.3  # Default low risk
+    if income_value is not None and isinstance(income_value, (int, float)) and income_value > 0:
+        monthly_income = income_value / 12
+        if monthly_income > 0:
+            payment_ratio = monthly_payment / monthly_income if isinstance(monthly_payment, (int, float)) else 0
+            if payment_ratio > 0.5:  # Payment > 50% of income
+                payment_ratio_risk = 0.9  # Very high risk
+            elif payment_ratio > 0.4:  # Payment > 40%
+                payment_ratio_risk = 0.7  # High risk
+            elif payment_ratio > 0.3:  # Payment > 30%
+                payment_ratio_risk = 0.5  # Medium risk
+            elif payment_ratio > 0.2:  # Payment > 20%
+                payment_ratio_risk = 0.4  # Low-medium risk
+            else:
+                payment_ratio_risk = 0.2  # Low risk
+    risk_factors.append(("payment_ratio", payment_ratio_risk, 0.15))
+    
+    # 4. Age factor (5% weight) - reduced
     age = client_data.get("age")
     age_risk = 0.5  # Default
     if age is not None and isinstance(age, (int, float)):
@@ -54,12 +108,19 @@ def calculate_risk_score(client_data: Dict[str, Any]) -> float:
             age_risk = 0.4  # Lower risk for middle age
         else:
             age_risk = 0.5  # Medium risk for older
-    risk_factors.append(("age", age_risk, 0.1))
+    risk_factors.append(("age", age_risk, 0.05))
     
-    # 3. Overdue payments factor (25% weight)
-    overdue_sum = client_data.get("hdb_bki_total_max_overdue_sum") or client_data.get("ovrd_sum") or client_data.get("hdb_ovrd_sum")
+    # 5. Overdue payments factor (20% weight) - includes utility, fines, alimony, taxes
+    overdue_sum = (
+        client_data.get("hdb_bki_total_max_overdue_sum") or 0
+    ) + (
+        client_data.get("ovrd_sum") or 0
+    ) + (
+        client_data.get("hdb_ovrd_sum") or 0
+    )
+    
     overdue_risk = 0.3  # Default low risk
-    if overdue_sum is not None and isinstance(overdue_sum, (int, float)) and overdue_sum > 0:
+    if isinstance(overdue_sum, (int, float)) and overdue_sum > 0:
         if overdue_sum > 100000:
             overdue_risk = 0.9  # Very high risk
         elif overdue_sum > 50000:
@@ -70,9 +131,9 @@ def calculate_risk_score(client_data: Dict[str, Any]) -> float:
             overdue_risk = 0.5  # Medium risk
         else:
             overdue_risk = 0.4  # Low-medium risk
-    risk_factors.append(("overdue", overdue_risk, 0.25))
+    risk_factors.append(("overdue", overdue_risk, 0.20))
     
-    # 4. Number of loans factor (15% weight)
+    # 6. Number of loans factor (8% weight) - reduced
     loan_cnt = client_data.get("loan_cnt") or 0
     other_credits = client_data.get("other_credits_count") or 0
     total_loans = (loan_cnt if isinstance(loan_cnt, (int, float)) else 0) + (other_credits if isinstance(other_credits, (int, float)) else 0)
@@ -88,36 +149,70 @@ def calculate_risk_score(client_data: Dict[str, Any]) -> float:
         loan_risk = 0.6  # Medium-high risk
     else:
         loan_risk = 0.7  # High risk (too many loans)
-    risk_factors.append(("loans", loan_risk, 0.15))
+    risk_factors.append(("loans", loan_risk, 0.08))
     
-    # 5. BKI products and credit limits factor (10% weight)
-    bki_products = client_data.get("bki_total_products") or client_data.get("hdb_bki_total_products") or 0
-    bki_products = bki_products if isinstance(bki_products, (int, float)) else 0
-    
-    bki_risk = 0.5  # Default
-    if bki_products == 0:
-        bki_risk = 0.5  # Medium risk (no credit history)
-    elif bki_products <= 2:
-        bki_risk = 0.4  # Lower risk
-    elif bki_products <= 5:
-        bki_risk = 0.5  # Medium risk
-    else:
-        bki_risk = 0.6  # Higher risk (many products)
-    risk_factors.append(("bki", bki_risk, 0.1))
-    
-    # 6. Credit card overdue factor (10% weight)
-    cc_overdue = client_data.get("hdb_bki_total_cc_max_overdue") or client_data.get("hdb_bki_active_cc_max_overdue")
-    cc_risk = 0.3  # Default low risk
-    if cc_overdue is not None and isinstance(cc_overdue, (int, float)) and cc_overdue > 0:
-        if cc_overdue > 50000:
-            cc_risk = 0.8  # High risk
-        elif cc_overdue > 20000:
-            cc_risk = 0.7  # Medium-high risk
-        elif cc_overdue > 5000:
-            cc_risk = 0.6  # Medium risk
+    # 7. Credit history requests frequency factor (5% weight) - NEW
+    # Frequent requests indicate financial stress
+    days_after_last_request = client_data.get("days_after_last_request")
+    request_risk = 0.3  # Default low risk
+    if days_after_last_request is not None and isinstance(days_after_last_request, (int, float)):
+        if days_after_last_request < 30:  # Request in last month
+            request_risk = 0.7  # High risk (frequent requests)
+        elif days_after_last_request < 90:  # Request in last 3 months
+            request_risk = 0.5  # Medium risk
+        elif days_after_last_request < 180:  # Request in last 6 months
+            request_risk = 0.4  # Low-medium risk
         else:
-            cc_risk = 0.5  # Medium risk
-    risk_factors.append(("cc_overdue", cc_risk, 0.1))
+            request_risk = 0.3  # Low risk (infrequent requests)
+    risk_factors.append(("credit_requests", request_risk, 0.05))
+    
+    # 8. Recent loan application rejections factor (5% weight) - NEW
+    # Low success rate indicates rejections
+    loan_success = client_data.get("vert_pil_loan_application_success_3m")
+    rejection_risk = 0.3  # Default low risk
+    if loan_success is not None and isinstance(loan_success, (int, float)):
+        # Assuming this is a ratio or count - lower means more rejections
+        if loan_success == 0:  # No successful applications
+            rejection_risk = 0.8  # High risk (all rejected)
+        elif loan_success < 0.3:  # Less than 30% success
+            rejection_risk = 0.7  # High risk
+        elif loan_success < 0.5:  # Less than 50% success
+            rejection_risk = 0.5  # Medium risk
+        else:
+            rejection_risk = 0.3  # Low risk (good success rate)
+    risk_factors.append(("rejections", rejection_risk, 0.05))
+    
+    # 9. Dependents factor (5% weight) - NEW
+    # Low per capita income with high total income suggests dependents
+    per_capita_income = client_data.get("per_capita_income_rur_amt")
+    dependents_risk = 0.4  # Default medium risk
+    if income_value is not None and per_capita_income is not None:
+        if isinstance(income_value, (int, float)) and isinstance(per_capita_income, (int, float)) and income_value > 0:
+            if per_capita_income < income_value * 0.5:  # Per capita < 50% of total
+                dependents_risk = 0.6  # Higher risk (likely has dependents)
+            elif per_capita_income < income_value * 0.7:  # Per capita < 70% of total
+                dependents_risk = 0.5  # Medium risk
+            else:
+                dependents_risk = 0.3  # Lower risk (few or no dependents)
+    risk_factors.append(("dependents", dependents_risk, 0.05))
+    
+    # 10. Job stability factor (2% weight) - NEW
+    # Higher seniority = lower risk
+    seniority = client_data.get("dp_ils_total_seniority")
+    stability_risk = 0.5  # Default medium risk
+    if seniority is not None and isinstance(seniority, (int, float)):
+        # Assuming seniority is in days or months
+        if seniority > 1825:  # > 5 years
+            stability_risk = 0.2  # Very low risk
+        elif seniority > 1095:  # > 3 years
+            stability_risk = 0.3  # Low risk
+        elif seniority > 365:  # > 1 year
+            stability_risk = 0.4  # Low-medium risk
+        elif seniority > 180:  # > 6 months
+            stability_risk = 0.5  # Medium risk
+        else:
+            stability_risk = 0.6  # Higher risk (short tenure)
+    risk_factors.append(("job_stability", stability_risk, 0.02))
     
     # Calculate weighted average
     total_weight = sum(weight for _, _, weight in risk_factors)
