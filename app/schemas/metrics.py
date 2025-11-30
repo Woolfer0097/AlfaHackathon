@@ -7,6 +7,7 @@ class Experiment(BaseModel):
     
     name: str = Field(..., description="Experiment name", example="baseline_model_v1")
     wmae: float = Field(..., description="Weighted Mean Absolute Error", example=0.125)
+    mae: Optional[float] = Field(None, description="Mean Absolute Error (for display on charts)", example=33117.79)
     date: Optional[str] = Field(None, description="Experiment date in ISO format", example="2024-01-15T10:30:00Z")
     
     class Config:
@@ -24,6 +25,7 @@ class SegmentError(BaseModel):
     
     segment: str = Field(..., description="Client segment name", example="VIP")
     wmae: float = Field(..., description="Weighted Mean Absolute Error for this segment", example=0.095)
+    mae: Optional[float] = Field(None, description="Mean Absolute Error for this segment (for display on charts)", example=25000.0)
     
     class Config:
         json_schema_extra = {

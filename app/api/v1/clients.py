@@ -5,6 +5,7 @@ from app.schemas.client import Client
 from app.core.logging import get_logger
 from app.core.database import get_db
 from app.services.client_service import ClientService
+from app.services.risk_service import calculate_risk_score, get_income_segment
 
 router = APIRouter()
 logger = get_logger(__name__)
@@ -78,19 +79,26 @@ async def get_clients(
             name_parts.append(f"{age} лет")
         full_name = f"Клиент #{client_id}" + (f" ({', '.join(name_parts)})" if name_parts else "")
         
-        # Use incomeValueCategory as segment
-        segment = income_category or "unknown"
-        
-        # Simple risk score calculation based on income (can be improved)
+        # Get client data for risk calculation
         income_value = getattr(client, 'incomeValue', None)
-        risk_score = 0.5  # Default
-        if income_value:
-            if income_value < 50000:
-                risk_score = 0.7  # Higher risk for low income
-            elif income_value > 200000:
-                risk_score = 0.2  # Lower risk for high income
-            else:
-                risk_score = 0.5  # Medium risk
+        client_data = ClientService.get_client_features_dict(db, client_id)
+        
+        # Calculate improved risk score with multiple factors
+        if client_data:
+            risk_score = calculate_risk_score(client_data)
+        else:
+            # Fallback to simple calculation if client data not available
+            risk_score = 0.5
+            if income_value:
+                if income_value < 50000:
+                    risk_score = 0.7
+                elif income_value > 200000:
+                    risk_score = 0.2
+                else:
+                    risk_score = 0.5
+        
+        # Get improved segment name
+        segment = get_income_segment(income_value, income_category)
         
         result.append(Client(
             id=client_id,
@@ -211,18 +219,25 @@ async def get_client(
         name_parts.append(f"{age} лет")
     full_name = f"Клиент #{client_id}" + (f" ({', '.join(name_parts)})" if name_parts else "")
     
-    # Use incomeValueCategory as segment
-    segment = income_category or "unknown"
+    # Get client data for risk calculation
+    client_data = ClientService.get_client_features_dict(db, client_id)
     
-    # Simple risk score calculation based on income
-    risk_score = 0.5  # Default
-    if income_value:
-        if income_value < 50000:
-            risk_score = 0.7  # Higher risk for low income
-        elif income_value > 200000:
-            risk_score = 0.2  # Lower risk for high income
-        else:
-            risk_score = 0.5  # Medium risk
+    # Calculate improved risk score with multiple factors
+    if client_data:
+        risk_score = calculate_risk_score(client_data)
+    else:
+        # Fallback to simple calculation if client data not available
+        risk_score = 0.5
+        if income_value:
+            if income_value < 50000:
+                risk_score = 0.7
+            elif income_value > 200000:
+                risk_score = 0.2
+            else:
+                risk_score = 0.5
+    
+    # Get improved segment name
+    segment = get_income_segment(income_value, income_category)
     
     return Client(
         id=client_id,

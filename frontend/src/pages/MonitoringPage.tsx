@@ -80,14 +80,17 @@ export const MonitoringPage = () => {
     );
   }
 
+  // Use MAE for charts if available, otherwise fall back to WMAE
   const experimentsData = metrics.experiments.map((exp) => ({
     name: exp.name,
-    wmae: exp.wmae,
+    mae: exp.mae ?? exp.wmae, // Use MAE if available, otherwise WMAE
+    wmae: exp.wmae, // Keep WMAE for reference
   }));
 
   const segmentErrorsData = metrics.segment_errors.map((seg) => ({
     segment: seg.segment,
-    wmae: seg.wmae,
+    mae: seg.mae ?? seg.wmae, // Use MAE if available, otherwise WMAE
+    wmae: seg.wmae, // Keep WMAE for reference
   }));
 
   // Training runs data
@@ -332,9 +335,9 @@ export const MonitoringPage = () => {
                 <Legend />
                 <Line
                   type="monotone"
-                  dataKey="wmae"
+                  dataKey="mae"
                   stroke="#EF3124"
-                  name="WMAE"
+                  name="MAE"
                   strokeWidth={2}
                 />
               </LineChart>
@@ -356,7 +359,7 @@ export const MonitoringPage = () => {
                 <YAxis />
                 <Tooltip />
                 <Legend />
-                <Bar dataKey="wmae" fill="#EF3124" name="WMAE" />
+                <Bar dataKey="mae" fill="#EF3124" name="MAE" />
               </BarChart>
             </ResponsiveContainer>
           ) : (

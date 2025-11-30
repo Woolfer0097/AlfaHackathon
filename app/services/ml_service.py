@@ -5,7 +5,7 @@ import json
 import numpy as np
 import pandas as pd
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 from catboost import CatBoostRegressor, Pool
 from app.core.config import settings
 from app.core.logging import get_logger
@@ -200,9 +200,15 @@ class MLService:
             "features": []
         }
         
-        # Map SHAP values to features
+        # Map SHAP values to features, excluding categorical features
+        # Categorical features (dt, gender, adminarea, city_smart_name, addrref) 
+        # should not influence SHAP explanations as they are metadata/identifiers
         for i, feature_name in enumerate(self.feature_cols):
             if i < len(feature_shap_values):
+                # Skip categorical features - they are not meaningful for SHAP analysis
+                if feature_name in self.cat_features:
+                    continue
+                
                 shap_value = float(feature_shap_values[i])
                 feature_value = client_data.get(feature_name)
                 
@@ -214,6 +220,122 @@ class MLService:
                 })
         
         return result
+    
+    def get_income_dynamics_shap(self, client_data: Dict) -> Dict:
+        """
+        Get SHAP values for income dynamics features (how income changes over time affect prediction)
+        
+        This method focuses on income-related features and shows how changes in income
+        over time periods affect the prediction, rather than absolute values.
+        
+        Args:
+            client_data: Dictionary with client features
+            
+        Returns:
+            Dictionary with income dynamics SHAP analysis
+        """
+        if self.model is None:
+            raise RuntimeError("Model not loaded")
+        
+        # Income-related features that show dynamics over time
+        income_features = [
+            "salary_6to12m_avg",
+            "dp_ils_avg_salary_1y",
+            "dp_ils_avg_salary_2y",
+            "dp_ils_avg_salary_3y",
+            "dp_ils_salary_ratio_1y3y",
+            "dp_payoutincomedata_payout_avg_3_month",
+            "dp_payoutincomedata_payout_avg_6_month",
+            "dp_payoutincomedata_payout_avg_prev_year",
+            "incomeValue",
+            "incomeValueCategory"
+        ]
+        
+        # Get all SHAP values
+        shap_result = self.get_shap_values(client_data)
+        
+        # Filter to income-related features
+        income_shap_features = []
+        for feature in shap_result["features"]:
+            if feature["feature_name"] in income_features:
+                income_shap_features.append(feature)
+        
+        # Sort by absolute SHAP value
+        income_shap_features.sort(key=lambda x: abs(x["shap_value"]), reverse=True)
+        
+        # Calculate income trend indicators
+        income_values = {}
+        for feature_name in income_features:
+            if feature_name in client_data:
+                value = client_data[feature_name]
+                if value is not None and not (isinstance(value, float) and np.isnan(value)):
+                    income_values[feature_name] = float(value) if isinstance(value, (int, float)) else value
+        
+        # Analyze trends
+        trends = []
+        if "dp_ils_avg_salary_1y" in income_values and "dp_ils_avg_salary_2y" in income_values:
+            salary_1y = income_values["dp_ils_avg_salary_1y"]
+            salary_2y = income_values["dp_ils_avg_salary_2y"]
+            if salary_1y > 0 and salary_2y > 0:
+                change_pct = ((salary_1y - salary_2y) / salary_2y) * 100
+                trends.append({
+                    "period": "1 год vs 2 года",
+                    "change_percent": change_pct,
+                    "description": f"Зарплата {'выросла' if change_pct > 0 else 'снизилась'} на {abs(change_pct):.1f}%"
+                })
+        
+        if "dp_ils_avg_salary_1y" in income_values and "dp_ils_avg_salary_3y" in income_values:
+            salary_1y = income_values["dp_ils_avg_salary_1y"]
+            salary_3y = income_values["dp_ils_avg_salary_3y"]
+            if salary_1y > 0 and salary_3y > 0:
+                change_pct = ((salary_1y - salary_3y) / salary_3y) * 100
+                trends.append({
+                    "period": "1 год vs 3 года",
+                    "change_percent": change_pct,
+                    "description": f"Зарплата {'выросла' if change_pct > 0 else 'снизилась'} на {abs(change_pct):.1f}%"
+                })
+        
+        if "dp_payoutincomedata_payout_avg_3_month" in income_values and "dp_payoutincomedata_payout_avg_6_month" in income_values:
+            payout_3m = income_values["dp_payoutincomedata_payout_avg_3_month"]
+            payout_6m = income_values["dp_payoutincomedata_payout_avg_6_month"]
+            if payout_3m > 0 and payout_6m > 0:
+                change_pct = ((payout_3m - payout_6m) / payout_6m) * 100
+                trends.append({
+                    "period": "3 месяца vs 6 месяцев",
+                    "change_percent": change_pct,
+                    "description": f"Доход {'вырос' if change_pct > 0 else 'снизился'} на {abs(change_pct):.1f}%"
+                })
+        
+        return {
+            "base_value": shap_result["base_value"],
+            "income_features": income_shap_features,
+            "income_values": income_values,
+            "trends": trends,
+            "summary": self._generate_income_dynamics_summary(income_shap_features, trends)
+        }
+    
+    def _generate_income_dynamics_summary(self, income_features: List[Dict], trends: List[Dict]) -> str:
+        """Generate human-readable summary of income dynamics"""
+        if not income_features:
+            return "Недостаточно данных о динамике дохода для анализа."
+        
+        parts = []
+        
+        # Most influential income feature
+        if income_features:
+            top_feature = income_features[0]
+            direction = "увеличивает" if top_feature["shap_value"] > 0 else "снижает"
+            parts.append(
+                f"Наибольшее влияние на предсказание дохода оказывает {top_feature['feature_name']} "
+                f"({direction} предсказание на {abs(top_feature['shap_value']):.0f} руб.)"
+            )
+        
+        # Trends
+        if trends:
+            trend_descriptions = [t["description"] for t in trends]
+            parts.append(f"Динамика дохода: {', '.join(trend_descriptions)}")
+        
+        return ". ".join(parts) if parts else "Анализ динамики дохода выполнен."
 
 
 # Global ML service instance

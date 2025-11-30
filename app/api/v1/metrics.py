@@ -7,6 +7,9 @@ from app.core.config import settings
 from app.core.logging import get_logger
 from app.core.database import get_db
 from app.models.prediction_logs import PredictionLog
+from app.models.client_features import ClientFeatures
+from app.services.risk_service import get_income_segment
+from collections import defaultdict
 
 router = APIRouter()
 logger = get_logger(__name__)
@@ -83,23 +86,78 @@ async def get_model_metrics(db: Session = Depends(get_db)) -> ModelMetrics:
         # Use real-time WMAE if available, otherwise fall back to static validation WMAE
         wmae_to_use = real_time_wmae if real_time_wmae is not None else metrics_data.get("wmae_validation", 0.0)
         
+        # Calculate MAE by segment from prediction logs
+        segment_mae_map = {}
+        if predictions_with_actual:
+            # Group predictions by segment
+            segment_errors_dict = defaultdict(list)
+            for pred in predictions_with_actual:
+                if pred.prediction_error is not None:
+                    # Get client features to determine segment
+                    client = db.query(ClientFeatures).filter(ClientFeatures.id == pred.client_id).first()
+                    if client:
+                        income_value = getattr(client, 'incomeValue', None)
+                        income_category = getattr(client, 'incomeValueCategory', None)
+                        # Convert income_category to string if needed
+                        if income_category is not None and not isinstance(income_category, str):
+                            income_category = str(income_category)
+                        segment = get_income_segment(income_value, income_category)
+                        segment_errors_dict[segment].append(pred.prediction_error)
+            
+            # Calculate MAE for each segment (mean of absolute errors)
+            for segment, errors in segment_errors_dict.items():
+                if errors:
+                    segment_mae_map[segment] = sum(errors) / len(errors)
+        
         # Convert JSON data to ModelMetrics schema
         experiments = [
             Experiment(
                 name=exp.get("name", ""),
                 wmae=exp.get("wmae", 0.0),
+                mae=exp.get("mae"),  # MAE from JSON if available
                 date=exp.get("date")
             )
             for exp in metrics_data.get("experiments", [])
         ]
         
-        segment_errors = [
-            SegmentError(
-                segment=seg.get("segment", ""),
-                wmae=seg.get("wmae", 0.0)
+        # Create segment_errors with MAE from prediction logs
+        segment_errors = []
+        for seg in metrics_data.get("segment_errors", []):
+            segment_name = seg.get("segment", "")
+            # Try to find MAE for this segment from prediction logs
+            # Match by segment name or try to find similar segment
+            mae_value = None
+            for seg_key, mae_val in segment_mae_map.items():
+                # Try to match segments (exact match or by category)
+                if segment_name.lower() in seg_key.lower() or seg_key.lower() in segment_name.lower():
+                    mae_value = mae_val
+                    break
+            
+            # If no match found, try to get MAE from the first segment that matches income category
+            if mae_value is None and segment_mae_map:
+                # Use average MAE across all segments as fallback
+                mae_value = sum(segment_mae_map.values()) / len(segment_mae_map)
+            
+            segment_errors.append(
+                SegmentError(
+                    segment=segment_name,
+                    wmae=seg.get("wmae", 0.0),
+                    mae=mae_value
+                )
             )
-            for seg in metrics_data.get("segment_errors", [])
-        ]
+        
+        # If we have MAE from prediction logs but no matching segments in JSON,
+        # add them to segment_errors
+        for segment_name, mae_val in segment_mae_map.items():
+            # Check if this segment is already in segment_errors
+            if not any(se.segment == segment_name for se in segment_errors):
+                segment_errors.append(
+                    SegmentError(
+                        segment=segment_name,
+                        wmae=0.0,  # WMAE not available for dynamically calculated segments
+                        mae=mae_val
+                    )
+                )
         
         # Load training metrics from training_metrics.json
         training_runs = []
