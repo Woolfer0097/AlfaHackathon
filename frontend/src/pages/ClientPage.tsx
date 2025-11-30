@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
 import {
   Box,
   Container,
@@ -26,7 +26,7 @@ import {
   DialogActions,
 } from '@mui/material';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { useClientsPaginated, useClient } from '../hooks/useClients';
+import { useClientsPaginated, useClient, useClientsCount } from '../hooks/useClients';
 import { useClientIncome, useClientShap } from '../hooks/usePrediction';
 import { useRecommendations } from '../hooks/useRecommendations';
 
@@ -75,26 +75,16 @@ export const ClientPage = () => {
 
   const offset = (page - 1) * ITEMS_PER_PAGE;
   
-  // Filter clients on frontend for search (can be moved to backend later)
-  const { data: allClients, isLoading: clientsLoading, error: clientsError } = useClientsPaginated(10000, 0);
+  // Use server-side pagination
+  const { data: paginatedClients, isLoading: clientsLoading, error: clientsError } = useClientsPaginated(
+    ITEMS_PER_PAGE,
+    offset,
+    searchQuery.trim() || undefined
+  );
   
-  const filteredClients = useMemo(() => {
-    if (!allClients) return [];
-    if (!searchQuery.trim()) return allClients;
-    const query = searchQuery.toLowerCase();
-    return allClients.filter(
-      (client) =>
-        client.full_name.toLowerCase().includes(query) ||
-        client.id.toString().includes(query) ||
-        (client.city && client.city.toLowerCase().includes(query))
-    );
-  }, [allClients, searchQuery]);
-
-  const paginatedClients = useMemo(() => {
-    return filteredClients.slice(offset, offset + ITEMS_PER_PAGE);
-  }, [filteredClients, offset]);
-
-  const totalPages = Math.ceil(filteredClients.length / ITEMS_PER_PAGE);
+  // Get total count for pagination
+  const { data: totalCount = 0 } = useClientsCount(searchQuery.trim() || undefined);
+  const totalPages = Math.ceil(totalCount / ITEMS_PER_PAGE);
 
   const { data: client, isLoading: clientLoading } = useClient(selectedClientId);
   const { data: income, isLoading: incomeLoading } = useClientIncome(selectedClientId);
@@ -108,7 +98,7 @@ export const ClientPage = () => {
   };
 
   const chartData = shap?.features.map((f) => ({
-    name: f.feature_name,
+    name: f.description || f.feature_name,
     value: f.shap_value,
     direction: f.direction,
   })) || [];
@@ -177,7 +167,7 @@ export const ClientPage = () => {
                   mb: 4,
                 }}
               >
-                {paginatedClients.map((client) => (
+                {(paginatedClients || []).map((client) => (
                   <Card
                     key={client.id}
                     sx={{
@@ -244,7 +234,7 @@ export const ClientPage = () => {
                 </Box>
               )}
 
-              {paginatedClients.length === 0 && (
+              {(!paginatedClients || paginatedClients.length === 0) && !clientsLoading && (
                 <Alert severity="info">
                   Клиенты не найдены. Попробуйте изменить поисковый запрос.
                 </Alert>
@@ -443,7 +433,7 @@ export const ClientPage = () => {
                         <Box component="span">Базовый доход: {formatCurrency(shap.base_value)}</Box>
                         {shap.features.map((f, idx) => (
                           <Box key={idx} component="div" sx={{ mt: 0.5 }}>
-                            {f.direction === 'positive' ? '+' : '-'} {f.feature_name}:{' '}
+                            {f.direction === 'positive' ? '+' : '-'} {f.description || f.feature_name}:{' '}
                             {formatCurrencyShort(Math.abs(f.shap_value))}
                           </Box>
                         ))}
@@ -465,9 +455,10 @@ export const ClientPage = () => {
                           .map((f) => (
                             <Chip
                               key={f.feature_name}
-                              label={f.feature_name}
+                              label={f.description || f.feature_name}
                               color="error"
                               size="small"
+                              title={f.feature_name}
                             />
                           ))}
                       </Box>
@@ -482,9 +473,10 @@ export const ClientPage = () => {
                           .map((f) => (
                             <Chip
                               key={f.feature_name}
-                              label={f.feature_name}
+                              label={f.description || f.feature_name}
                               color="success"
                               size="small"
+                              title={f.feature_name}
                             />
                           ))}
                       </Box>
@@ -495,16 +487,28 @@ export const ClientPage = () => {
                     <Table size="small">
                       <TableHead>
                         <TableRow>
-                          <TableCell>Признак</TableCell>
+                          <TableCell>Признак (описание)</TableCell>
                           <TableCell>Значение</TableCell>
                           <TableCell>SHAP значение</TableCell>
-                          <TableCell>Описание</TableCell>
                         </TableRow>
                       </TableHead>
                       <TableBody>
                         {shap.features.map((feature, idx) => (
                           <TableRow key={idx}>
-                            <TableCell>{feature.feature_name}</TableCell>
+                            <TableCell>
+                              <Typography variant="body2" component="div">
+                                {feature.description || (
+                                  <span style={{ color: '#d32f2f' }}>
+                                    {feature.feature_name} (описание отсутствует)
+                                  </span>
+                                )}
+                              </Typography>
+                              {feature.description && (
+                                <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 0.5 }}>
+                                  {feature.feature_name}
+                                </Typography>
+                              )}
+                            </TableCell>
                             <TableCell>{feature.value}</TableCell>
                             <TableCell
                               sx={{
@@ -514,7 +518,6 @@ export const ClientPage = () => {
                               {feature.direction === 'positive' ? '+' : ''}
                               {feature.shap_value.toFixed(2)}
                             </TableCell>
-                            <TableCell>{feature.description || '-'}</TableCell>
                           </TableRow>
                         ))}
                       </TableBody>

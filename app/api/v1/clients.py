@@ -19,7 +19,7 @@ logger = get_logger(__name__)
     tags=["clients"]
 )
 async def get_clients(
-    limit: int = Query(100, ge=1, le=10000, description="Maximum number of results"),
+    limit: int = Query(100, ge=1, le=100000, description="Maximum number of results"),
     offset: int = Query(0, ge=0, description="Offset for pagination"),
     adminarea: Optional[str] = Query(None, description="Filter by administrative area (region)"),
     city: Optional[str] = Query(None, description="Filter by city"),
@@ -33,7 +33,7 @@ async def get_clients(
     personal details and income information.
     
     Args:
-        limit: Maximum number of results (1-1000)
+        limit: Maximum number of results (1-100000)
         offset: Offset for pagination
         adminarea: Filter by administrative area (region)
         city: Filter by city name
@@ -107,6 +107,45 @@ async def get_clients(
         ))
     
     return result
+
+
+@router.get(
+    "/clients/count",
+    summary="Get total count of clients",
+    description="Retrieve the total number of clients in the system with optional filters",
+    response_description="Total count of clients",
+    tags=["clients"]
+)
+async def get_clients_count(
+    adminarea: Optional[str] = Query(None, description="Filter by administrative area (region)"),
+    city: Optional[str] = Query(None, description="Filter by city"),
+    search: Optional[str] = Query(None, description="Search query (not yet implemented)"),
+    db: Session = Depends(get_db)
+) -> dict:
+    """
+    Get total count of clients with optional filters.
+    
+    Returns the total number of clients matching the specified filters.
+    Useful for pagination calculations.
+    
+    Args:
+        adminarea: Filter by administrative area (region)
+        city: Filter by city name
+        search: Search query (not yet implemented)
+        db: Database session
+    
+    Returns:
+        dict: Dictionary with 'count' key containing the total number
+    """
+    logger.debug(f"Counting clients: adminarea={adminarea}, city={city}, search={search}")
+    
+    count = ClientService.count_clients(
+        db=db,
+        adminarea=adminarea,
+        city=city
+    )
+    
+    return {"count": count}
 
 
 @router.get(
