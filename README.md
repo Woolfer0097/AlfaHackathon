@@ -1,3 +1,5 @@
+Демо: https://drive.google.com/file/d/1tpATHR0WWo7jBQMt4bf0R6YgJ9uLwhao/view?usp=sharing
+
 # Alfa Hackathon ML Platform
 
 Платформа для скоринга клиентов банка: ML-модель CatBoost, REST API на FastAPI, витрина мониторинга на React и Nginx-прокси. Проект решает две задачи:
