@@ -6,6 +6,7 @@ from app.core.logging import get_logger
 from app.core.database import get_db
 from app.services.client_service import ClientService
 from app.services.ml_service import get_ml_service
+from app.services.risk_service import calculate_risk_score
 
 router = APIRouter()
 logger = get_logger(__name__)
@@ -142,11 +143,65 @@ async def get_recommendations(
         logger.error(f"Error predicting income for recommendations: {e}", exc_info=True)
         predicted_income = client_data.get("incomeValue", 0) or 50000.0
     
-    # Determine segment
+    # Determine segment based on income
     segment = determine_segment(client_data, predicted_income)
     
-    # Get recommendations for segment
-    product_configs = SEGMENT_PRODUCTS.get(segment, SEGMENT_PRODUCTS["low_income"])
+    # Calculate risk score
+    risk_score = calculate_risk_score(client_data)
+    
+    # Get base recommendations for segment
+    base_product_configs = SEGMENT_PRODUCTS.get(segment, SEGMENT_PRODUCTS["low_income"])
+    
+    # Adjust recommendations based on risk score
+    # Low risk clients (green) should get more products, even with lower income
+    # High risk clients should get fewer or more conservative products
+    product_configs = []
+    
+    if risk_score < 0.4:  # Low risk (green) - offer more products
+        # Low risk clients get products from their segment + products from next segment up
+        product_configs = list(base_product_configs)
+        
+        # Add products from higher segment if available
+        if segment == "low_income":
+            # Low risk + low income -> offer medium income products too
+            product_configs.extend(SEGMENT_PRODUCTS.get("medium_income", []))
+        elif segment == "medium_income":
+            # Low risk + medium income -> offer high income products too
+            product_configs.extend(SEGMENT_PRODUCTS.get("high_income", []))
+        # High income already has all products
+        
+        # Add conservative products for low risk clients
+        product_configs.append({
+            "product_name": "Накопительный счет",
+            "product_type": "deposit",
+            "rate": 6.5,
+            "reason": "Низкий риск-скор позволяет рекомендовать накопительные продукты",
+            "description": "Накопительный счет с возможностью пополнения и снятия"
+        })
+        
+    elif risk_score < 0.7:  # Medium risk (yellow) - standard recommendations
+        product_configs = list(base_product_configs)
+        
+    else:  # High risk (red) - conservative recommendations only
+        # High risk clients get only basic products, even if they have high income
+        if segment == "high_income":
+            # High risk + high income -> offer only medium income products
+            product_configs = SEGMENT_PRODUCTS.get("medium_income", [])
+        elif segment == "medium_income":
+            # High risk + medium income -> offer only low income products
+            product_configs = SEGMENT_PRODUCTS.get("low_income", [])
+        else:
+            # High risk + low income -> offer only basic products
+            product_configs = [
+                {
+                    "product_name": "Базовая кредитная карта",
+                    "product_type": "credit_card",
+                    "limit": 100000.0,  # Lower limit for high risk
+                    "rate": 28.0,  # Higher rate for high risk
+                    "reason": "Высокий риск-скор требует консервативных условий",
+                    "description": "Базовая кредитная карта с ограниченным лимитом"
+                }
+            ]
     
     # Convert to Recommendation objects
     recommendations = []
@@ -160,6 +215,8 @@ async def get_recommendations(
             reason=product_config["reason"],
             description=product_config.get("description")
         ))
+    
+    logger.debug(f"Generated {len(recommendations)} recommendations for client {client_id}: segment={segment}, risk_score={risk_score:.3f}")
     
     return recommendations
 
