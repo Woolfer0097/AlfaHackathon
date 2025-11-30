@@ -25,7 +25,7 @@ import {
   DialogContent,
   DialogActions,
 } from '@mui/material';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell, ReferenceLine } from 'recharts';
 import { useClientsPaginated, useClient, useClientsCount } from '../hooks/useClients';
 import { useClientIncome, useClientShap } from '../hooks/usePrediction';
 import { useRecommendations } from '../hooks/useRecommendations';
@@ -97,11 +97,32 @@ export const ClientPage = () => {
     return 'error';
   };
 
-  const chartData = shap?.features.map((f) => ({
-    name: f.description || f.feature_name,
-    value: f.shap_value,
-    direction: f.direction,
-  })) || [];
+  // Prepare chart data showing cumulative income impact (waterfall effect)
+  // Shows how each feature affects income starting from base_value
+  const chartData = (() => {
+    if (!shap || shap.base_value === undefined) return [];
+    
+    const baseValue = shap.base_value;
+    // Sort features by absolute SHAP value (most important first) for better visualization
+    const sortedFeatures = [...shap.features].sort(
+      (a, b) => Math.abs(b.shap_value) - Math.abs(a.shap_value)
+    );
+    
+    // Calculate cumulative income: each bar shows income after adding this feature's impact
+    let cumulativeIncome = baseValue;
+    return sortedFeatures.map((f) => {
+      cumulativeIncome += f.shap_value;
+      const impact = f.shap_value; // SHAP impact value for this feature
+      
+      return {
+        name: f.description || f.feature_name,
+        income: cumulativeIncome, // Cumulative income after this feature
+        impact: impact, // Impact of this feature
+        baseValue: baseValue, // Base value for reference
+        direction: f.direction,
+      };
+    });
+  })();
 
   const handleOpenDialog = (recommendation: any) => {
     setSelectedRecommendation(recommendation);
@@ -403,6 +424,9 @@ export const ClientPage = () => {
                   <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
                     {shap.text_explanation}
                   </Typography>
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                    График показывает влияние каждой фичи на итоговый доход. Каждый столбец показывает доход после учета влияния соответствующей фичи (кумулятивно от базового дохода).
+                  </Typography>
 
                   <Box sx={{ mb: 4 }}>
                     <ResponsiveContainer width="100%" height={400}>
@@ -415,16 +439,51 @@ export const ClientPage = () => {
                           height={120}
                           interval={0}
                         />
-                        <YAxis />
-                        <Tooltip />
+                        <YAxis 
+                          tickFormatter={(value) => formatCurrencyShort(value)}
+                        />
+                        {shap?.base_value !== undefined && (
+                          <ReferenceLine 
+                            y={shap.base_value} 
+                            stroke="#666" 
+                            strokeDasharray="3 3" 
+                            label={{ value: "Базовый доход", position: "right" }}
+                          />
+                        )}
+                        <Tooltip 
+                          formatter={(value: number, name: string, props: any) => {
+                            if (name === 'income') {
+                              const impact = props.payload.impact;
+                              const sign = impact >= 0 ? '+' : '';
+                              return [
+                                `${formatCurrency(value)}\nВлияние: ${sign}${formatCurrencyShort(Math.abs(impact))}`,
+                                'Доход после влияния'
+                              ];
+                            }
+                            return value;
+                          }}
+                          labelFormatter={(label) => label}
+                          contentStyle={{ backgroundColor: 'rgba(255, 255, 255, 0.95)' }}
+                        />
                         <Legend />
                         <Bar
-                          dataKey="value"
-                          fill="#EF3124"
-                          name="SHAP значение"
-                        />
+                          dataKey="income"
+                          name="Доход (кумулятивно)"
+                        >
+                          {chartData.map((entry: any, index: number) => (
+                            <Cell 
+                              key={`cell-${index}`} 
+                              fill={entry.impact >= 0 ? '#2e7d32' : '#d32f2f'} 
+                            />
+                          ))}
+                        </Bar>
                       </BarChart>
                     </ResponsiveContainer>
+                    {shap?.base_value !== undefined && (
+                      <Typography variant="body2" color="text.secondary" sx={{ mt: 1, textAlign: 'center' }}>
+                        Базовый доход: {formatCurrency(shap.base_value)}
+                      </Typography>
+                    )}
                   </Box>
 
                   {shap.base_value !== undefined && (

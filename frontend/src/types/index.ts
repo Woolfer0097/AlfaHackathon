@@ -67,11 +67,13 @@ export interface ModelMetrics {
 export interface Experiment {
   name: string;
   wmae: number;
+  mae?: number;
   date?: string;
 }
 
 export interface SegmentError {
   segment: string;
   wmae: number;
+  mae?: number;
 }
 

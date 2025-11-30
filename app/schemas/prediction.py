@@ -67,6 +67,52 @@ class ShapResponse(BaseModel):
         }
 
 
+class IncomeTrend(BaseModel):
+    """Income trend over time period"""
+    
+    period: str = Field(..., description="Time period comparison", example="1 год vs 2 года")
+    change_percent: float = Field(..., description="Percentage change", example=5.2)
+    description: str = Field(..., description="Human-readable description", example="Зарплата выросла на 5.2%")
+
+
+class IncomeDynamicsShapResponse(BaseModel):
+    """SHAP analysis for income dynamics over time"""
+    
+    summary: str = Field(..., description="Summary of income dynamics analysis")
+    base_value: Optional[float] = Field(None, description="Base prediction value", example=80000.0)
+    income_features: List[ShapFeature] = Field(..., description="SHAP values for income-related features")
+    income_values: dict = Field(default_factory=dict, description="Current income values by feature")
+    trends: List[IncomeTrend] = Field(default_factory=list, description="Income trends over time periods")
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "summary": "Наибольшее влияние на предсказание дохода оказывает dp_ils_avg_salary_1y (увеличивает предсказание на 5000 руб.). Динамика дохода: Зарплата выросла на 5.2%",
+                "base_value": 80000.0,
+                "income_features": [
+                    {
+                        "feature_name": "dp_ils_avg_salary_1y",
+                        "value": 85000.0,
+                        "shap_value": 5000.0,
+                        "direction": "positive",
+                        "description": "Средняя зарплата за 1 год"
+                    }
+                ],
+                "income_values": {
+                    "dp_ils_avg_salary_1y": 85000.0,
+                    "dp_ils_avg_salary_2y": 80000.0
+                },
+                "trends": [
+                    {
+                        "period": "1 год vs 2 года",
+                        "change_percent": 6.25,
+                        "description": "Зарплата выросла на 6.25%"
+                    }
+                ]
+            }
+        }
+
+
 # Legacy schemas for backward compatibility
 class PredictionRequest(BaseModel):
     """Legacy prediction request schema"""
