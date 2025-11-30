@@ -15,4 +15,3 @@ ENV/
 .env
 logs/
 *.log
-*.csv
