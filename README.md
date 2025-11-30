@@ -13,6 +13,7 @@ Backend+DevOPS Кочегаров Данила
 ## Демо и ML-ноутбук
 - Продуктовый стенд: http://31.59.40.65/
 - Google Colab с исследованием и обучением модели: https://colab.research.google.com/drive/1T4Mu5kMdsjLVTixKBAu-zR_vfEAbhPA-?usp=sharing
+- Видео-демо: https://drive.google.com/file/d/1tpATHR0WWo7jBQMt4bf0R6YgJ9uLwhao/view?usp=sharing
 
 ## Архитектура и стек
 | Слой | Технологии и версии |
