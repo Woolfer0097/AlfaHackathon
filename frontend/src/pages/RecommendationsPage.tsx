@@ -67,7 +67,7 @@ export const RecommendationsPage = () => {
 
       <Box sx={{ mb: 4 }}>
         <Autocomplete
-          options={clients || []}
+          options={(clients || []).filter((client) => client.id !== 0)}
           getOptionLabel={(option) => `${option.full_name} (ID: ${option.id})`}
           loading={clientsLoading}
           onChange={(_, value) => setSelectedClientId(value?.id || null)}

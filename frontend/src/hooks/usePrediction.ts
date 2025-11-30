@@ -6,7 +6,7 @@ export const useClientIncome = (clientId: number | null) => {
   return useQuery<IncomePrediction>({
     queryKey: ['client-income', clientId],
     queryFn: () => predictionApi.getClientIncome(clientId!),
-    enabled: !!clientId,
+    enabled: clientId !== null && clientId !== undefined,
   });
 };
 
@@ -14,7 +14,7 @@ export const useClientShap = (clientId: number | null) => {
   return useQuery<ShapResponse>({
     queryKey: ['client-shap', clientId],
     queryFn: () => predictionApi.getClientShap(clientId!),
-    enabled: !!clientId,
+    enabled: clientId !== null && clientId !== undefined,
   });
 };
 

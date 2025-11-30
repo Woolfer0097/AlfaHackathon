@@ -6,7 +6,7 @@ export const useRecommendations = (clientId: number | null) => {
   return useQuery<Recommendation[]>({
     queryKey: ['recommendations', clientId],
     queryFn: () => recommendationsApi.getRecommendations(clientId!),
-    enabled: !!clientId,
+    enabled: clientId !== null && clientId !== undefined,
   });
 };
 

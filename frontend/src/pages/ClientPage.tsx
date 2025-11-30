@@ -147,7 +147,7 @@ export const ClientPage = () => {
       </Typography>
 
       {/* Search and Client Cards Section */}
-      {!selectedClientId && (
+      {selectedClientId === null && (
         <>
           <Box sx={{ mb: 4 }}>
             <TextField
@@ -188,7 +188,7 @@ export const ClientPage = () => {
                   mb: 4,
                 }}
               >
-                {(paginatedClients || []).map((client) => (
+                {(paginatedClients || []).filter((client) => client.id !== 0).map((client) => (
                   <Card
                     key={client.id}
                     sx={{
@@ -266,7 +266,7 @@ export const ClientPage = () => {
       )}
 
       {/* Client Detail View */}
-      {selectedClientId && (
+      {selectedClientId !== null && (
         <>
           <Box sx={{ mb: 2 }}>
             <Button

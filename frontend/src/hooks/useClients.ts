@@ -27,7 +27,7 @@ export const useClient = (id: number | null) => {
   return useQuery<Client>({
     queryKey: ['client', id],
     queryFn: () => clientsApi.getClient(id!),
-    enabled: !!id,
+    enabled: id !== null && id !== undefined,
   });
 };
 
