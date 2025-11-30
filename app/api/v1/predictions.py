@@ -8,6 +8,7 @@ from app.core.database import get_db
 from app.services.client_service import ClientService
 from app.services.ml_service import get_ml_service
 from app.models.prediction_logs import PredictionLog
+from app.models.feature_descriptions import FeatureDescription
 
 router = APIRouter()
 logger = get_logger(__name__)
@@ -160,25 +161,46 @@ async def get_client_shap(
         # Take top 20 features for explanation
         top_features = features_sorted[:20]
         
-        # Generate text explanation
+        # Fetch feature descriptions from database (in Russian) BEFORE generating text explanation
+        feature_names = [f["feature_name"] for f in top_features]
+        descriptions_map = {}
+        if feature_names:
+            descriptions = db.query(FeatureDescription).filter(
+                FeatureDescription.feature_name.in_(feature_names)
+            ).all()
+            descriptions_map = {desc.feature_name: desc.description for desc in descriptions}
+        
+        # Generate text explanation using Russian descriptions
         positive_features = [f for f in top_features if f["shap_value"] > 0]
         negative_features = [f for f in top_features if f["shap_value"] < 0]
         
         explanation_parts = []
         if positive_features:
             top_positive = positive_features[0]
+            feature_name = top_positive['feature_name']
+            # Use Russian description if available, otherwise use feature name
+            display_name = descriptions_map.get(feature_name, feature_name)
             explanation_parts.append(
-                f"Положительное влияние: {top_positive['feature_name']} "
+                f"Положительное влияние: {display_name} "
                 f"(вклад: {top_positive['shap_value']:.2f})"
             )
         if negative_features:
             top_negative = negative_features[0]
+            feature_name = top_negative['feature_name']
+            # Use Russian description if available, otherwise use feature name
+            display_name = descriptions_map.get(feature_name, feature_name)
             explanation_parts.append(
-                f"Отрицательное влияние: {top_negative['feature_name']} "
+                f"Отрицательное влияние: {display_name} "
                 f"(вклад: {top_negative['shap_value']:.2f})"
             )
         
         text_explanation = ". ".join(explanation_parts) if explanation_parts else "SHAP значения рассчитаны."
+        
+        # Log missing descriptions for debugging
+        missing_descriptions = set(feature_names) - set(descriptions_map.keys())
+        if missing_descriptions:
+            logger.warning(f"Missing descriptions for {len(missing_descriptions)} features: {list(missing_descriptions)[:5]}")
+        logger.debug(f"Fetched {len(descriptions_map)} descriptions for {len(feature_names)} features")
         
         # Convert to ShapFeature objects
         shap_features = []
@@ -216,13 +238,20 @@ async def get_client_shap(
                     except (ValueError, TypeError):
                         feature_value = 0.0
             
+            # Get description from database (Russian description)
+            description = descriptions_map.get(feature_name)
+            
+            # If no description found, log a warning but still include the feature
+            if not description:
+                logger.debug(f"No Russian description found for feature: {feature_name}")
+            
             shap_features.append(
                 ShapFeature(
                     feature_name=feature_name,
                     value=feature_value,
                     shap_value=f["shap_value"],
                     direction=f["direction"],
-                    description=None
+                    description=description  # Russian description from database
                 )
             )
         

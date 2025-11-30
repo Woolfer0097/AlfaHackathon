@@ -20,12 +20,12 @@ export const clientsApi = {
   },
 
   getClientsCount: async (search?: string): Promise<number> => {
-    // For now, we'll fetch a large limit and count, or add a count endpoint later
-    // This is a simple implementation - backend can add /clients/count later
     const params = new URLSearchParams();
     if (search) params.append('search', search);
-    const response = await httpClient.get<Client[]>('/clients?limit=10000');
-    return response.data.length;
+    const queryString = params.toString();
+    const url = `/clients/count${queryString ? `?${queryString}` : ''}`;
+    const response = await httpClient.get<{ count: number }>(url);
+    return response.data.count;
   },
 };
 
